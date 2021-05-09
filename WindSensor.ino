@@ -41,6 +41,7 @@ void setup() {
 
   TimerCount = 0;
   Rotations = 0; // Set Rotations to 0 ready for calculations
+  
 
   Serial.begin(9600);
 
