@@ -9,6 +9,9 @@
 #define WindVanePin (A4) // The pin the wind vane sensor is connected to
 #define VaneOffset 0; // define the anemometer offset from magnetic north
 
+#define PowerLed (7)
+#define ActLed (6)
+
 int VaneValue; // raw analog value from wind vane
 int Direction; // translated 0 - 360 direction
 int CalDirection; // converted value with offset applied
@@ -17,9 +20,12 @@ int LastValue; // last direction value
 volatile bool IsSampleRequired; // this is set true every 2.5s. Get wind speed
 volatile unsigned int TimerCount; // used to determine 2.5sec timer count
 volatile unsigned long Rotations; // cup rotation counter used in interrupt routine
+volatile unsigned long RotationsDebug; // cup rotation counter used for debugging console
 volatile unsigned long ContactBounceTime; // Timer to avoid contact bounce in isr
 
 float WindSpeed; // speed miles per hour
+
+bool debug = true;
 
 // ################################### ETHERNET SHIELD VARIABLES ################################################
 
@@ -32,6 +38,7 @@ unsigned int remotePort = 8889;
 
 EthernetUDP Udp;
 
+String in_chars = "";
 
 void setup() {
 
@@ -46,10 +53,12 @@ void setup() {
   Serial.begin(9600);
 
   pinMode(WindSensorPin, INPUT);
+  pinMode(PowerLed, OUTPUT);
+  pinMode(ActLed, OUTPUT);
   attachInterrupt(digitalPinToInterrupt(WindSensorPin), isr_rotation, FALLING);
 
   Serial.println("Davis Anemometer Test");
-  Serial.println("Speed (MPH)\tKnots\tDirection\tStrength");
+  Serial.println("Rotations\tM/S\tDirection\tStrength");
 
   // Setup the timer interupt
   Timer1.initialize(500000);// Timer interrupt every 2.5 seconds
@@ -57,9 +66,99 @@ void setup() {
 
   Ethernet.begin(mac, localIp);
   Udp.begin(localPort);
+
+  digitalWrite(PowerLed, HIGH);
 }
 
+
+
 void loop() {
+
+  char in_char = ' ';
+  while (Serial.available()){
+    in_char = Serial.read();
+    if (int(in_char)!=-1){
+      in_chars+=in_char;
+    }
+  }
+  if (in_char=='\n'){
+    Serial.print(in_chars);
+
+    if (in_chars.indexOf("remotePort ") == 0){
+      remotePort = in_chars.substring(11, in_chars.length()).toInt();
+      Serial.println(remotePort);
+    }
+   else if (in_chars.indexOf("localIp ") == 0){
+      String ip = "";
+      int ip1;
+      int ip2;
+      int ip3;
+      int ip4;
+
+      ip = in_chars.substring(8, in_chars.length()); // split ip to octents and put in own var.
+      ip1 = ip.substring(0, ip.indexOf(".")).toInt();
+      ip.remove(0, ip.indexOf(".")+1);
+      ip2 = ip.substring(0, ip.indexOf(".")).toInt();
+      ip.remove(0, ip.indexOf(".")+1);
+      ip3 = ip.substring(0, ip.indexOf(".")).toInt();
+      ip.remove(0, ip.indexOf(".")+1);
+      ip4 = ip.toInt();
+
+      IPAddress localIp(ip1,ip2,ip3,ip4); //init new ip address
+      Udp.stop();
+      Ethernet.begin(mac, localIp);
+      Udp.begin(localPort);
+      Serial.println("local ip changed");
+    }
+
+    else if (in_chars.indexOf("remoteIp ") == 0){
+      String ip = "";
+      int ip1;
+      int ip2;
+      int ip3;
+      int ip4;
+
+      ip = in_chars.substring(8, in_chars.length()); // split ip to octents and put in own var.
+      ip1 = ip.substring(0, ip.indexOf(".")).toInt();
+      ip.remove(0, ip.indexOf(".")+1);
+      ip2 = ip.substring(0, ip.indexOf(".")).toInt();
+      ip.remove(0, ip.indexOf(".")+1);
+      ip3 = ip.substring(0, ip.indexOf(".")).toInt();
+      ip.remove(0, ip.indexOf(".")+1);
+      ip4 = ip.toInt();
+
+      IPAddress rmiP (ip1,ip2,ip3,ip4); //init new ip address
+      remoteIp = rmiP;
+      Udp.stop();
+      Ethernet.begin(mac, localIp);
+      Udp.begin(localPort);
+      Serial.println("remote ip changed");
+    }
+    
+
+    else if(in_chars.indexOf("help") == 0){
+      Serial.println("---------------- HELP ------------------");
+      Serial.println("remotePort 8889 \t remotePort command will change the port OSC commands are sent to.");
+      Serial.println("remoteIp 192.168.1.101 \t remoteIp changes the Ip address OSC commands are sent to.");
+      Serial.println("localIp 192.168.1.100 \t localIp will change the Arduino Ip address");
+    }
+
+    else if(in_chars.indexOf("debug ") == 0){
+      String debugState = "";
+
+      debugState = in_chars.substring(6, in_chars.length());
+      if (debugState.indexOf("true") == 0){
+        debug = true;
+      }
+      else if (debugState.indexOf("false") == 0){
+        debug = false;
+      }
+
+    }
+
+    in_chars = "";
+  }
+
 
   OSCMessage msg("/wind");
 
@@ -73,18 +172,22 @@ void loop() {
   if(IsSampleRequired) {
     // convert to mp/h using the formula V=P(2.25/T)
     // V = P(2.25/2.5) = P * 0.9
-    WindSpeed = Rotations * 0.9;
+    WindSpeed = Rotations * 1.125;
+    RotationsDebug = Rotations;
     Rotations = 0; // Reset count for next sample
 
   IsSampleRequired = false;
+  
+  if (debug){
+    Serial.print(RotationsDebug); Serial.print("\t\t");
+    Serial.print(getMS(WindSpeed)); Serial.print("\t");
+    Serial.print(CalDirection);
+    getHeading(CalDirection); Serial.print("\t\t");
+    getWindStrength(WindSpeed);
+  }
 
-  Serial.print(WindSpeed); Serial.print("\t\t");
-  Serial.print(getKnots(WindSpeed)); Serial.print("\t");
-  Serial.print(CalDirection);
-  getHeading(CalDirection); Serial.print("\t\t");
-  getWindStrength(WindSpeed);
   msg.add(CalDirection);
-  msg.add(WindSpeed);
+  msg.add(getMS(WindSpeed));
 
   Udp.beginPacket(remoteIp, remotePort);
   msg.send(Udp);
@@ -97,8 +200,10 @@ void loop() {
 void isr_timer() {
 
   TimerCount++;
+  digitalWrite(ActLed, LOW);
 
-  if(TimerCount == 6) {
+  if(TimerCount == 4) {
+    digitalWrite(ActLed, HIGH);
     IsSampleRequired = true;
     TimerCount = 0;
   }
@@ -116,6 +221,10 @@ void isr_rotation() {
 // Convert MPH to Knots
 float getKnots(float speed) {
   return speed * 0.868976;
+}
+
+float getMS(float speed){
+  return speed * 0.47704;
 }
 
 // Get Wind Direction
