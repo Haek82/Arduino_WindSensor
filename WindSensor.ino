@@ -3,11 +3,18 @@
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 #include <OSCMessage.h>
+#include <EEPROM.h>
+
+// ###################################### EEPROM ##############################################################
+// Memory slots in use:
+int memSlotsLocalIp[] = {0,1,2,3};
+int memSlotsRemoteIp[] = {4,5,6,7}; 
 
 // ################################### WIND VANE VARIABLES ####################################################
 #define WindSensorPin (2) // The pin location of the anemometer sensor
 #define WindVanePin (A4) // The pin the wind vane sensor is connected to
 #define VaneOffset 0; // define the anemometer offset from magnetic north
+
 
 #define PowerLed (7)
 #define ActLed (6)
@@ -29,11 +36,13 @@ bool debug = true;
 
 // ################################### ETHERNET SHIELD VARIABLES ################################################
 
-IPAddress localIp(192,168,1,100);
+IPAddress localIp(EEPROM.read(0),EEPROM.read(1),EEPROM.read(2),EEPROM.read(3));
+//IPAddress localIp(192, 168, 1 ,210);
 byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0x3D, 0xEE};
 unsigned int localPort = 8888;
 
-IPAddress remoteIp(192,168,1,101);
+IPAddress remoteIp(EEPROM.read(4),EEPROM.read(5),EEPROM.read(6),EEPROM.read(7));
+//IPAddress remoteIp(192, 168, 1 ,211);
 unsigned int remotePort = 8889;
 
 EthernetUDP Udp;
@@ -42,6 +51,8 @@ String in_chars = "";
 
 void setup() {
 
+  Serial.begin(9600);
+
   LastValue = 0;
 
   IsSampleRequired = false;
@@ -49,8 +60,15 @@ void setup() {
   TimerCount = 0;
   Rotations = 0; // Set Rotations to 0 ready for calculations
   
+  // Serial.println(EEPROM.read(0));
+  // Serial.println(EEPROM.read(1));
+  // Serial.println(EEPROM.read(2));
+  // Serial.println(EEPROM.read(3));
 
-  Serial.begin(9600);
+  // Serial.println(EEPROM.read(4));
+  // Serial.println(EEPROM.read(5));
+  // Serial.println(EEPROM.read(6));
+  // Serial.println(EEPROM.read(7));
 
   pinMode(WindSensorPin, INPUT);
   pinMode(PowerLed, OUTPUT);
@@ -105,6 +123,15 @@ void loop() {
       ip4 = ip.toInt();
 
       IPAddress localIp(ip1,ip2,ip3,ip4); //init new ip address
+      EEPROM.write(memSlotsLocalIp[0], ip1);
+      EEPROM.write(memSlotsLocalIp[1], ip2);
+      EEPROM.write(memSlotsLocalIp[2], ip3);
+      EEPROM.write(memSlotsLocalIp[3], ip4);
+      Serial.println(EEPROM.read(0));
+      Serial.println(EEPROM.read(1));
+      Serial.println(EEPROM.read(2));
+      Serial.println(EEPROM.read(3));
+
       Udp.stop();
       Ethernet.begin(mac, localIp);
       Udp.begin(localPort);
@@ -128,6 +155,14 @@ void loop() {
       ip4 = ip.toInt();
 
       IPAddress rmiP (ip1,ip2,ip3,ip4); //init new ip address
+      EEPROM.write(memSlotsRemoteIp[0], ip1);
+      EEPROM.write(memSlotsRemoteIp[1], ip2);
+      EEPROM.write(memSlotsRemoteIp[2], ip3);
+      EEPROM.write(memSlotsRemoteIp[3], ip4);
+      Serial.println(EEPROM.read(4));
+      Serial.println(EEPROM.read(5));
+      Serial.println(EEPROM.read(6));
+      Serial.println(EEPROM.read(7));
       remoteIp = rmiP;
       Udp.stop();
       Ethernet.begin(mac, localIp);
@@ -138,9 +173,9 @@ void loop() {
 
     else if(in_chars.indexOf("help") == 0){
       Serial.println("---------------- HELP ------------------");
-      Serial.println("remotePort 8889 \t remotePort command will change the port OSC commands are sent to.");
-      Serial.println("remoteIp 192.168.1.101 \t remoteIp changes the Ip address OSC commands are sent to.");
-      Serial.println("localIp 192.168.1.100 \t localIp will change the Arduino Ip address");
+      Serial.println("remotePort <port nr> \t remotePort command will change the port OSC commands are sent to.");
+      Serial.println("remoteIp <ip address> \t remoteIp changes the Ip address OSC commands are sent to.");
+      Serial.println("localIp <ip address> \t localIp will change the Arduino Ip address");
     }
 
     else if(in_chars.indexOf("debug ") == 0){
