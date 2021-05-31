@@ -8,7 +8,9 @@
 // ###################################### EEPROM ##############################################################
 // Memory slots in use:
 int memSlotsLocalIp[] = {0,1,2,3};
-int memSlotsRemoteIp[] = {4,5,6,7}; 
+int memSlotsRemoteIp[] = {4,5,6,7};
+int memSlotsLocalMask[] = {8,9,10,11};
+int memSlotsMacAddress[] = {101, 102, 103, 104, 105, 106};
 
 // ################################### WIND VANE VARIABLES ####################################################
 #define WindSensorPin (2) // The pin location of the anemometer sensor
@@ -37,8 +39,9 @@ bool debug = true;
 // ################################### ETHERNET SHIELD VARIABLES ################################################
 
 IPAddress localIp(EEPROM.read(0),EEPROM.read(1),EEPROM.read(2),EEPROM.read(3));
+IPAddress localMask(EEPROM.read(memSlotsLocalMask[0]), EEPROM.read(memSlotsLocalMask[1]), EEPROM.read(memSlotsLocalMask[2]), EEPROM.read(memSlotsLocalMask[3]));
 //IPAddress localIp(192, 168, 1 ,210);
-byte mac[] = {0x90, 0xA2, 0xDA, 0x10, 0x3D, 0xEE};
+byte mac[] = {EEPROM.read(memSlotsMacAddress[0]), EEPROM.read(memSlotsMacAddress[1]), EEPROM.read(memSlotsMacAddress[2]), EEPROM.read(memSlotsMacAddress[3]), EEPROM.read(memSlotsMacAddress[4]), EEPROM.read(memSlotsMacAddress[5])};
 unsigned int localPort = 8888;
 
 IPAddress remoteIp(EEPROM.read(4),EEPROM.read(5),EEPROM.read(6),EEPROM.read(7));
@@ -59,16 +62,6 @@ void setup() {
 
   TimerCount = 0;
   Rotations = 0; // Set Rotations to 0 ready for calculations
-  
-  // Serial.println(EEPROM.read(0));
-  // Serial.println(EEPROM.read(1));
-  // Serial.println(EEPROM.read(2));
-  // Serial.println(EEPROM.read(3));
-
-  // Serial.println(EEPROM.read(4));
-  // Serial.println(EEPROM.read(5));
-  // Serial.println(EEPROM.read(6));
-  // Serial.println(EEPROM.read(7));
 
   pinMode(WindSensorPin, INPUT);
   pinMode(PowerLed, OUTPUT);
@@ -83,12 +76,13 @@ void setup() {
   Timer1.attachInterrupt(isr_timer);
 
   Ethernet.begin(mac, localIp);
+  Ethernet.setSubnetMask(localMask);
   Udp.begin(localPort);
 
   digitalWrite(PowerLed, HIGH);
-}
 
-
+  //setMacAddress(); // Use once for setting MAC address
+ }
 
 void loop() {
 
@@ -136,6 +130,39 @@ void loop() {
       Ethernet.begin(mac, localIp);
       Udp.begin(localPort);
       Serial.println("local ip changed");
+    }
+
+    else if (in_chars.indexOf("localMask ") == 0){
+      String mask = "";
+      int mask1;
+      int mask2;
+      int mask3;
+      int mask4;
+
+      mask = in_chars.substring(10, in_chars.length()); // split ip to octents and put in own var.
+      mask1 = mask.substring(0, mask.indexOf(".")).toInt();
+      mask.remove(0, mask.indexOf(".")+1);
+      mask2 = mask.substring(0, mask.indexOf(".")).toInt();
+      mask.remove(0, mask.indexOf(".")+1);
+      mask3 = mask.substring(0, mask.indexOf(".")).toInt();
+      mask.remove(0, mask.indexOf(".")+1);
+      mask4 = mask.toInt();
+
+      IPAddress localMask(mask1,mask2,mask3,mask4); //init new ip address
+      EEPROM.write(memSlotsLocalMask[0], mask1);
+      EEPROM.write(memSlotsLocalMask[1], mask2);
+      EEPROM.write(memSlotsLocalMask[2], mask3);
+      EEPROM.write(memSlotsLocalMask[3], mask4);
+      Serial.println(EEPROM.read(memSlotsLocalMask[0]));
+      Serial.println(EEPROM.read(memSlotsLocalMask[1]));
+      Serial.println(EEPROM.read(memSlotsLocalMask[2]));
+      Serial.println(EEPROM.read(memSlotsLocalMask[3]));
+
+      Udp.stop();
+      Ethernet.begin(mac, localIp);
+      Ethernet.setSubnetMask(localMask);
+      Udp.begin(localPort);
+      Serial.println("local mask changed");
     }
 
     else if (in_chars.indexOf("remoteIp ") == 0){
@@ -191,6 +218,15 @@ void loop() {
 
     }
 
+    else if(in_chars.indexOf("show config") == 0){
+      Serial.println("======================= CURRENT CONFIG ==========================");
+      Serial.print("MAC Address: ");
+      for (int i=0; i < 6; i++){
+        Serial.print(mac[i], HEX);
+        if (i < 5) Serial.print(":");
+      }
+      Serial.println("");
+    }
     in_chars = "";
   }
 
@@ -229,6 +265,17 @@ void loop() {
   Udp.endPacket();
   msg.empty();
   }
+}
+
+void setMacAddress(){
+  byte setMacAddressArray[] = {0xA8,0x61,0x0A,0xAE,0x67,0xF1};
+
+  EEPROM.write(memSlotsMacAddress[0], setMacAddressArray[0]);
+  EEPROM.write(memSlotsMacAddress[1], setMacAddressArray[1]);
+  EEPROM.write(memSlotsMacAddress[2], setMacAddressArray[2]);
+  EEPROM.write(memSlotsMacAddress[3], setMacAddressArray[3]);
+  EEPROM.write(memSlotsMacAddress[4], setMacAddressArray[4]);
+  EEPROM.write(memSlotsMacAddress[5], setMacAddressArray[5]);
 }
 
 // isr handler for timer interrupt
