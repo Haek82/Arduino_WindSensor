@@ -102,7 +102,7 @@ void loop() {
       Serial.println("remote port changed");
       restartEthernet();
     }
-    
+
    else if (in_chars.indexOf("localIp ") == 0){
       String ip = "";
       int ip1;
@@ -125,10 +125,6 @@ void loop() {
       EEPROM.write(memSlotsLocalIp[1], ip2);
       EEPROM.write(memSlotsLocalIp[2], ip3);
       EEPROM.write(memSlotsLocalIp[3], ip4);
-      Serial.println(EEPROM.read(0));
-      Serial.println(EEPROM.read(1));
-      Serial.println(EEPROM.read(2));
-      Serial.println(EEPROM.read(3));
 
       restartEthernet();
       Serial.println("local ip changed");
@@ -150,7 +146,8 @@ void loop() {
       mask.remove(0, mask.indexOf(".")+1);
       mask4 = mask.toInt();
 
-      IPAddress localMask(mask1,mask2,mask3,mask4); //init new ip address
+      IPAddress lMask(mask1,mask2,mask3,mask4); //init new ip address
+      localMask = lMask;
       EEPROM.write(memSlotsLocalMask[0], mask1);
       EEPROM.write(memSlotsLocalMask[1], mask2);
       EEPROM.write(memSlotsLocalMask[2], mask3);
@@ -176,7 +173,8 @@ void loop() {
       gw.remove(0, gw.indexOf(".")+1);
       gw4 = gw.toInt();
 
-      IPAddress localMask(gw1,gw2,gw3,gw4); //init new ip address
+      IPAddress lGw(gw1,gw2,gw3,gw4); //init new ip address
+      localGateway = lGw;
       EEPROM.write(memSlotsGateway[0], gw1);
       EEPROM.write(memSlotsGateway[1], gw2);
       EEPROM.write(memSlotsGateway[2], gw3);
@@ -213,10 +211,16 @@ void loop() {
     }
 
     else if(in_chars.indexOf("help") == 0){
-      Serial.println("=======================  HELP =======================");
-      Serial.println("remotePort <port nr> \t remotePort command will change the port OSC commands are sent to.");
-      Serial.println("remoteIp <ip address> \t remoteIp changes the Ip address OSC commands are sent to.");
-      Serial.println("localIp <ip address> \t localIp will change the Arduino Ip address");
+      Serial.println("=============================  HELP  =============================");
+      Serial.println("remotePort <port nr> \t\t remotePort command will change the port OSC commands are sent to.");
+      Serial.println("remoteIp <ip address> \t\t remoteIp changes the Ip address OSC commands are sent to.\n");
+
+      Serial.println("localIp <ip address> \t\t localIp changes the Arduino Ip address");
+      Serial.println("localGateway <ip address> \t localGateway changes the Gateway on the Arduino");
+      Serial.println("localMask <mask> \t\t localMask changes the subnet mask on the Arduino\n");
+
+      Serial.println("debug <true/false> \t\t debug will enable/disable the debug output to the Serial monitor.");
+      Serial.println("show config \t\t\t shows current network config in use.");
     }
 
     else if(in_chars.indexOf("debug ") == 0){
@@ -277,7 +281,13 @@ void loop() {
       Serial.println(remotePort);     
 
     }
+
+    else{
+      Serial.println("Unknown command");
+      Serial.println("Use help for command list");
+    }
     in_chars = "";
+    Serial.print(">");
   }
 
 
@@ -326,7 +336,7 @@ void restartEthernet(){
 }
 
 void setMacAddress(){
-  byte setMacAddressArray[] = {0xA8,0x61,0x0A,0xAE,0x67,0xF1};
+  byte setMacAddressArray[] = {0xA8,0x61,0x0A,0xAE,0x67,0xFF};
 
   EEPROM.write(memSlotsMacAddress[0], setMacAddressArray[0]);
   EEPROM.write(memSlotsMacAddress[1], setMacAddressArray[1]);
