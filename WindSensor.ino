@@ -10,6 +10,8 @@
 int memSlotsLocalIp[] = {0,1,2,3};
 int memSlotsRemoteIp[] = {4,5,6,7};
 int memSlotsLocalMask[] = {8,9,10,11};
+int memSlotsGateway[] = {12,13,14,15};
+int memSlotRemotePort[] = {20,21};
 int memSlotsMacAddress[] = {101, 102, 103, 104, 105, 106};
 
 // ################################### WIND VANE VARIABLES ####################################################
@@ -40,13 +42,12 @@ bool debug = true;
 
 IPAddress localIp(EEPROM.read(0),EEPROM.read(1),EEPROM.read(2),EEPROM.read(3));
 IPAddress localMask(EEPROM.read(memSlotsLocalMask[0]), EEPROM.read(memSlotsLocalMask[1]), EEPROM.read(memSlotsLocalMask[2]), EEPROM.read(memSlotsLocalMask[3]));
-//IPAddress localIp(192, 168, 1 ,210);
+IPAddress localGateway(EEPROM.read(memSlotsGateway[0]), EEPROM.read(memSlotsGateway[1]), EEPROM.read(memSlotsGateway[2]), EEPROM.read(memSlotsGateway[3]));
 byte mac[] = {EEPROM.read(memSlotsMacAddress[0]), EEPROM.read(memSlotsMacAddress[1]), EEPROM.read(memSlotsMacAddress[2]), EEPROM.read(memSlotsMacAddress[3]), EEPROM.read(memSlotsMacAddress[4]), EEPROM.read(memSlotsMacAddress[5])};
 unsigned int localPort = 8888;
 
 IPAddress remoteIp(EEPROM.read(4),EEPROM.read(5),EEPROM.read(6),EEPROM.read(7));
-//IPAddress remoteIp(192, 168, 1 ,211);
-unsigned int remotePort = 8889;
+unsigned int remotePort;
 
 EthernetUDP Udp;
 
@@ -68,18 +69,17 @@ void setup() {
   pinMode(ActLed, OUTPUT);
   attachInterrupt(digitalPinToInterrupt(WindSensorPin), isr_rotation, FALLING);
 
-  Serial.println("Davis Anemometer Test");
+  Serial.println("Absurd Solutions 2021, Windsensor to OSC");
   Serial.println("Rotations\tM/S\tDirection\tStrength");
 
   // Setup the timer interupt
   Timer1.initialize(500000);// Timer interrupt every 2.5 seconds
   Timer1.attachInterrupt(isr_timer);
 
-  Ethernet.begin(mac, localIp);
-  Ethernet.setSubnetMask(localMask);
-  Udp.begin(localPort);
+  restartEthernet();
 
   digitalWrite(PowerLed, HIGH);
+  remotePort = readUnsignedIntFromEEPROM(memSlotRemotePort[0]);
 
   //setMacAddress(); // Use once for setting MAC address
  }
@@ -98,8 +98,11 @@ void loop() {
 
     if (in_chars.indexOf("remotePort ") == 0){
       remotePort = in_chars.substring(11, in_chars.length()).toInt();
-      Serial.println(remotePort);
+      writeUnsignedIntIntoEEPROM(memSlotRemotePort[0], remotePort);
+      Serial.println("remote port changed");
+      restartEthernet();
     }
+    
    else if (in_chars.indexOf("localIp ") == 0){
       String ip = "";
       int ip1;
@@ -116,7 +119,8 @@ void loop() {
       ip.remove(0, ip.indexOf(".")+1);
       ip4 = ip.toInt();
 
-      IPAddress localIp(ip1,ip2,ip3,ip4); //init new ip address
+      IPAddress lIp(ip1,ip2,ip3,ip4); //init new ip address
+      localIp = lIp;
       EEPROM.write(memSlotsLocalIp[0], ip1);
       EEPROM.write(memSlotsLocalIp[1], ip2);
       EEPROM.write(memSlotsLocalIp[2], ip3);
@@ -126,9 +130,7 @@ void loop() {
       Serial.println(EEPROM.read(2));
       Serial.println(EEPROM.read(3));
 
-      Udp.stop();
-      Ethernet.begin(mac, localIp);
-      Udp.begin(localPort);
+      restartEthernet();
       Serial.println("local ip changed");
     }
 
@@ -153,16 +155,35 @@ void loop() {
       EEPROM.write(memSlotsLocalMask[1], mask2);
       EEPROM.write(memSlotsLocalMask[2], mask3);
       EEPROM.write(memSlotsLocalMask[3], mask4);
-      Serial.println(EEPROM.read(memSlotsLocalMask[0]));
-      Serial.println(EEPROM.read(memSlotsLocalMask[1]));
-      Serial.println(EEPROM.read(memSlotsLocalMask[2]));
-      Serial.println(EEPROM.read(memSlotsLocalMask[3]));
 
-      Udp.stop();
-      Ethernet.begin(mac, localIp);
-      Ethernet.setSubnetMask(localMask);
-      Udp.begin(localPort);
+      restartEthernet();
       Serial.println("local mask changed");
+    }
+
+    else if (in_chars.indexOf("localGateway ") == 0){
+      String gw = "";
+      int gw1;
+      int gw2;
+      int gw3;
+      int gw4;
+
+      gw = in_chars.substring(13, in_chars.length()); // split ip to octents and put in own var.
+      gw1 = gw.substring(0, gw.indexOf(".")).toInt();
+      gw.remove(0, gw.indexOf(".")+1);
+      gw2 = gw.substring(0, gw.indexOf(".")).toInt();
+      gw.remove(0, gw.indexOf(".")+1);
+      gw3 = gw.substring(0, gw.indexOf(".")).toInt();
+      gw.remove(0, gw.indexOf(".")+1);
+      gw4 = gw.toInt();
+
+      IPAddress localMask(gw1,gw2,gw3,gw4); //init new ip address
+      EEPROM.write(memSlotsGateway[0], gw1);
+      EEPROM.write(memSlotsGateway[1], gw2);
+      EEPROM.write(memSlotsGateway[2], gw3);
+      EEPROM.write(memSlotsGateway[3], gw4);
+
+      restartEthernet();
+      Serial.println("local Gateway changed");
     }
 
     else if (in_chars.indexOf("remoteIp ") == 0){
@@ -186,20 +207,13 @@ void loop() {
       EEPROM.write(memSlotsRemoteIp[1], ip2);
       EEPROM.write(memSlotsRemoteIp[2], ip3);
       EEPROM.write(memSlotsRemoteIp[3], ip4);
-      Serial.println(EEPROM.read(4));
-      Serial.println(EEPROM.read(5));
-      Serial.println(EEPROM.read(6));
-      Serial.println(EEPROM.read(7));
       remoteIp = rmiP;
-      Udp.stop();
-      Ethernet.begin(mac, localIp);
-      Udp.begin(localPort);
+      restartEthernet();
       Serial.println("remote ip changed");
     }
-    
 
     else if(in_chars.indexOf("help") == 0){
-      Serial.println("---------------- HELP ------------------");
+      Serial.println("=======================  HELP =======================");
       Serial.println("remotePort <port nr> \t remotePort command will change the port OSC commands are sent to.");
       Serial.println("remoteIp <ip address> \t remoteIp changes the Ip address OSC commands are sent to.");
       Serial.println("localIp <ip address> \t localIp will change the Arduino Ip address");
@@ -220,12 +234,48 @@ void loop() {
 
     else if(in_chars.indexOf("show config") == 0){
       Serial.println("======================= CURRENT CONFIG ==========================");
-      Serial.print("MAC Address: ");
+      Serial.print("Local MAC Address: ");
       for (int i=0; i < 6; i++){
         Serial.print(mac[i], HEX);
         if (i < 5) Serial.print(":");
       }
       Serial.println("");
+
+      Serial.print("Local IP Address: ");
+      for (int i=0; i<4; i++){
+        Serial.print(localIp[i]);
+        if (i < 3) Serial.print(".");
+      }
+      Serial.println("");
+
+      Serial.print("Local Subnet Mask: ");
+      for (int i=0; i<4; i++){
+        Serial.print(localMask[i]);
+        if (i < 3) Serial.print(".");
+      }
+      Serial.println("");
+
+      Serial.print("Local Gateway: ");
+      for (int i=0; i<4; i++){
+        Serial.print(localGateway[i]);
+        if (i < 3) Serial.print(".");
+      }
+      Serial.println("");
+
+      Serial.print("Local UDP Port: ");
+      Serial.println(localPort);
+      Serial.println("");
+
+      Serial.print("Remote IP Address: ");
+      for (int i=0; i<4; i++){
+        Serial.print(remoteIp[i]);
+        if (i < 3) Serial.print(".");
+      }
+      Serial.println("");
+
+      Serial.print("Remote UDP Port: ");
+      Serial.println(remotePort);     
+
     }
     in_chars = "";
   }
@@ -267,6 +317,14 @@ void loop() {
   }
 }
 
+void restartEthernet(){
+  Udp.stop();
+  Ethernet.begin(mac, localIp);
+  Ethernet.setSubnetMask(localMask);
+  Ethernet.setGatewayIP(localGateway);
+  Udp.begin(localPort);
+}
+
 void setMacAddress(){
   byte setMacAddressArray[] = {0xA8,0x61,0x0A,0xAE,0x67,0xF1};
 
@@ -276,6 +334,16 @@ void setMacAddress(){
   EEPROM.write(memSlotsMacAddress[3], setMacAddressArray[3]);
   EEPROM.write(memSlotsMacAddress[4], setMacAddressArray[4]);
   EEPROM.write(memSlotsMacAddress[5], setMacAddressArray[5]);
+}
+
+void writeUnsignedIntIntoEEPROM(int address, unsigned int number)
+{ 
+  EEPROM.write(address, number >> 8);
+  EEPROM.write(address + 1, number & 0xFF);
+}
+unsigned int readUnsignedIntFromEEPROM(int address)
+{
+  return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
 }
 
 // isr handler for timer interrupt
