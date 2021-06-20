@@ -1,3 +1,6 @@
+#include <SLIPEncodedSerial.h>
+#include <SLIPEncodedUSBSerial.h>
+
 #include <TimerOne.h> // Timer Interrupt set to 2 second for read sensors
 #include <math.h>
 #include <Ethernet.h>
