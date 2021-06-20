@@ -50,9 +50,11 @@ byte mac[] = {EEPROM.read(memSlotsMacAddress[0]), EEPROM.read(memSlotsMacAddress
 unsigned int localPort = 8888;
 
 IPAddress remoteIp(EEPROM.read(4),EEPROM.read(5),EEPROM.read(6),EEPROM.read(7));
+IPAddress remoteIpSec(EEPROM.read(4),EEPROM.read(5),EEPROM.read(6),EEPROM.read(7)+1);
 unsigned int remotePort;
 
 EthernetUDP Udp;
+EthernetUDP Udp2;
 
 String in_chars = "";
 
@@ -204,11 +206,13 @@ void loop() {
       ip4 = ip.toInt();
 
       IPAddress rmiP (ip1,ip2,ip3,ip4); //init new ip address
+      IPAddress rmSiP (ip1,ip2,ip3,ip4+1); //init new secondary ip address
       EEPROM.write(memSlotsRemoteIp[0], ip1);
       EEPROM.write(memSlotsRemoteIp[1], ip2);
       EEPROM.write(memSlotsRemoteIp[2], ip3);
       EEPROM.write(memSlotsRemoteIp[3], ip4);
       remoteIp = rmiP;
+      remoteIpSec = rmSiP;
       restartEthernet();
       Serial.println("remote ip changed");
     }
@@ -280,6 +284,13 @@ void loop() {
       }
       Serial.println("");
 
+      Serial.print("Remote Secondary IP Address: ");
+      for (int i=0; i<4; i++){
+        Serial.print(remoteIpSec[i]);
+        if (i < 3) Serial.print(".");
+      }
+      Serial.println("");
+
       Serial.print("Remote UDP Port: ");
       Serial.println(remotePort);     
 
@@ -326,16 +337,21 @@ void loop() {
   Udp.beginPacket(remoteIp, remotePort);
   msg.send(Udp);
   Udp.endPacket();
+  Udp2.beginPacket(remoteIpSec, remotePort);
+  msg.send(Udp2);
+  Udp2.endPacket();
   msg.empty();
   }
 }
 
 void restartEthernet(){
   Udp.stop();
+  Udp2.stop();
   Ethernet.begin(mac, localIp);
   Ethernet.setSubnetMask(localMask);
   Ethernet.setGatewayIP(localGateway);
   Udp.begin(localPort);
+  Udp2.begin(localPort);
 }
 
 void setMacAddress(){
